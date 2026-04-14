@@ -1,0 +1,96 @@
+# 虚拟环境和IDE
+.venv/
+venv/
+ENV/
+.idea/
+.vscode/
+pyvenv.cfg
+
+# Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+
+# 编译文件
+build/
+dist/
+*.egg-info/
+
+# 数据集和缓存（不要上传！）
+TG_network_datasets/
+sample_data/
+cache/
+outputs/
+dataset/
+
+# 临时文件和测试文件
+TEST*.py
+untitled-*.py
+data_auto.py
+wikipedia_analysis.png
+*.tmp
+*.temp
+*~
+*.log
+
+# 大文件
+*.csv
+
+# 操作系统文件
+.DS_Store
+Thumbs.db# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+
+# Virtual Environment
+venv/
+ENV/
+.venv/
+pyvenv.cfg
+
+# IDE
+pp/.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# Data files (可选，如果你不想上传大文件)
+sample_data/
+TG_network_datasets/
+dataset/
+outputs/
+
+# Cache directory
+cache/
+
+# Models directory
+models/
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
