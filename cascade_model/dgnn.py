@@ -231,7 +231,7 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
     best_state = None
     best_loss = None
     early_stopping_counter = 0
-    early_stopping_patience = 20  # 早停耐心值
+    early_stopping_patience = getattr(config, 'patience', 20)  # 使用配置中的早停耐心值，默认20
     
     for epoch in range(config.epochs):
         random.shuffle(train_data)

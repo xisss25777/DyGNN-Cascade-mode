@@ -12,3 +12,4 @@ class PipelineConfig:
     random_seed: int = 42
     use_log_target: bool = True
     knn_neighbors: int = 9
+    patience: int = 20

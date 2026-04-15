@@ -10,29 +10,17 @@ H = 1280
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="生成论文风实验结果图")
-    parser.add_argument("--wiki", default="wikipedia_result.json", help="Wikipedia 结果文件")
-    parser.add_argument("--reddit", default="reddit_dgnn.json", help="Reddit 结果文件")
+    parser.add_argument("--wiki", default="outputs/wikipedia_result.json", help="Wikipedia 结果文件")
+    parser.add_argument("--reddit", default="outputs/reddit_result.json", help="Reddit 结果文件")
     args = parser.parse_args()
 
-    # 获取脚本所在目录的绝对路径
-    script_dir = Path(__file__).parent
-    outputs_dir = script_dir / "outputs"
-    
-    # 构建完整的文件路径
-    wiki_path = outputs_dir / args.wiki
-    reddit_path = outputs_dir / args.reddit
-    output = outputs_dir / "figures" / "publication_results_figure.svg"
-    
-    # 读取文件
-    wiki = json.loads(wiki_path.read_text(encoding="utf-8"))
-    reddit = json.loads(reddit_path.read_text(encoding="utf-8"))
-    
-    # 确保输出目录存在
+    wiki = json.loads(Path(args.wiki).read_text(encoding="utf-8"))
+    reddit = json.loads(Path(args.reddit).read_text(encoding="utf-8"))
+    output = Path("outputs/figures/publication_results_figure.svg")
     output.parent.mkdir(parents=True, exist_ok=True)
-    
-    # 写入结果
     output.write_text(build_svg(wiki, reddit), encoding="utf-8")
     print(f"论文结果图已输出到: {output}")
+
 
 def build_svg(wiki: dict, reddit: dict) -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">

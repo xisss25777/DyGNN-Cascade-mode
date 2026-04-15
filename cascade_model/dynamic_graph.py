@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from functools import lru_cache
+from typing import Dict, List, Optional, Set, Tuple
 
 from .data import Cascade, Event
 
@@ -55,7 +56,7 @@ def build_snapshots(
                 parent_map[event.user_id] = None
             event_index += 1
 
-        depth_by_node = _compute_depths(seen_nodes, parent_map)
+        depth_by_node = compute_depths(seen_nodes, parent_map)
         snapshots.append(
             Snapshot(
                 cutoff_time=cutoff_time,
@@ -76,19 +77,60 @@ def summarize_width(depth_by_node: Dict[str, int]) -> int:
     return max(level_counts.values())
 
 
+@lru_cache(maxsize=1000)
 def _compute_depths(
-    seen_nodes: Set[str],
-    parent_map: Dict[str, Optional[str]],
-) -> Dict[str, int]:
+    seen_nodes: Tuple[str, ...],
+    parent_map: Tuple[Tuple[str, Optional[str]], ...],
+) -> Tuple[Tuple[str, int], ...]:
+    """
+    计算每个节点的深度，使用缓存提高性能
+    
+    Args:
+        seen_nodes: 节点集合（转换为元组以支持缓存）
+        parent_map: 父节点映射（转换为元组以支持缓存）
+    
+    Returns:
+        节点深度的元组，每个元素是 (node, depth) 对
+    """
+    # 将元组转换回原始类型
+    seen_nodes_set = set(seen_nodes)
+    parent_map_dict = dict(parent_map)
+    
     depths: Dict[str, int] = {}
-    for node in seen_nodes:
+    for node in seen_nodes_set:
         depth = 0
         cursor = node
         visited = set()
-        while parent_map.get(cursor) is not None and cursor not in visited:
+        while parent_map_dict.get(cursor) is not None and cursor not in visited:
             visited.add(cursor)
-            cursor = parent_map[cursor]
+            cursor = parent_map_dict[cursor]
             depth += 1
         depths[node] = depth
-    return depths
+    
+    # 将结果转换为元组以支持缓存
+    return tuple(sorted(depths.items()))
 
+
+def compute_depths(
+    seen_nodes: Set[str],
+    parent_map: Dict[str, Optional[str]],
+) -> Dict[str, int]:
+    """
+    计算每个节点的深度，使用缓存提高性能
+    
+    Args:
+        seen_nodes: 节点集合
+        parent_map: 父节点映射
+    
+    Returns:
+        节点深度的字典
+    """
+    # 将参数转换为可哈希类型以支持缓存
+    seen_nodes_tuple = tuple(sorted(seen_nodes))
+    parent_map_tuple = tuple(sorted(parent_map.items()))
+    
+    # 调用缓存版本的函数
+    depths_tuple = _compute_depths(seen_nodes_tuple, parent_map_tuple)
+    
+    # 将结果转换回字典
+    return dict(depths_tuple)

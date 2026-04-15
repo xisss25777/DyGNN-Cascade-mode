@@ -6,10 +6,12 @@ from pathlib import Path
 
 # 添加父目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print("添加到Python路径: " + os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print("当前Python路径: " + str(sys.path))
 
 from cascade_model.data import write_sample_csv
 from cascade_model.dataset_profiles import load_dataset_and_config
-from cascade_model import run_dgnn_pipeline
+from cascade_model.dgnn import run_dgnn_pipeline
 from cascade_model.pipeline import run_pipeline
 from cascade_model.cache_utils import cache_manager, benchmark_cache_performance
 
@@ -29,9 +31,6 @@ def main() -> None:
     args = parser.parse_args()
 
     dataset_name, cascades, config = load_dataset_and_config(args.input, args.dataset)
-
-    # 添加数据集名称到配置
-    config.dataset_name = dataset_name
 
     # 生成缓存键
     cache_key = f"{dataset_name}_{config.epochs}_epochs"
@@ -59,7 +58,6 @@ def main() -> None:
         # 保存结果到缓存
         cache_manager.save_training_result(cache_key, report)
         print(f"训练结果已缓存: {cache_key}")
-
     report["dataset"] = dataset_name
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,7 +84,6 @@ def main() -> None:
         print(f"  - cascade {item['cascade_id']}: pred={item['prediction']}, pattern={main_pattern}")
     print(f"JSON 结果已输出到: {output_path}")
     print(f"摘要结果已输出到: {summary_path}")
-
 def build_summary(report: dict, output_path: Path) -> str:
     lines = [
         f"# {report['dataset']} 数据集实验摘要",

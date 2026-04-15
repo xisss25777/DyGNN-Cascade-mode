@@ -1,15 +1,10 @@
 import argparse
 import json
-import sys
-import os
 import time
 from pathlib import Path
 
-# 添加父目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from cascade_model.dataset_profiles import get_baseline_config, get_dgnn_config, load_dataset
-from cascade_model import run_dgnn_pipeline
+from cascade_model.dgnn import run_dgnn_pipeline
 from cascade_model.pipeline import run_pipeline
 
 
