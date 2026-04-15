@@ -41,6 +41,10 @@ wikipedia_analysis.png
 # 大文件
 *.csv
 
+# 本地文档文件（不提交到 GitHub）
+建模大赛思路0309.md
+论文思路参考.md
+
 # 操作系统文件
 .DS_Store
 Thumbs.db# Python
