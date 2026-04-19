@@ -24,11 +24,17 @@ def build_snapshots(
     if not cascade.events:
         return []
 
-    start_time = cascade.events[0].timestamp
-    cutoff_limit = start_time + observation_seconds
-    usable_events = [event for event in cascade.events if event.timestamp <= cutoff_limit]
+    # 时间已经归一化，从0开始
+    start_time = 0
+    cutoff_limit = observation_seconds
+    
+    # 所有事件都应该在时间范围内
+    usable_events = cascade.events
     if not usable_events:
-        usable_events = [cascade.events[0]]
+        return []
+    
+    # 按时间排序，确保顺序正确
+    usable_events = sorted(usable_events, key=lambda x: x.timestamp)
 
     snapshots: List[Snapshot] = []
     current_events: List[Event] = []

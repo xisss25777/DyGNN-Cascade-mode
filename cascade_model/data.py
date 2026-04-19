@@ -109,7 +109,9 @@ def load_wikipedia_cascades(path: str) -> List[Cascade]:
         # 归一化时间到24小时窗口
         normalized = normalize_cascade_times(ordered, target_span=86400)
         enriched = _assign_parents(normalized)
-        result.append(Cascade(cascade_id=cascade_id, events=enriched, target_size=len(enriched)))
+        # 计算唯一用户数作为目标大小
+        unique_users = set(event.user_id for event in enriched)
+        result.append(Cascade(cascade_id=cascade_id, events=enriched, target_size=len(unique_users)))
     return sorted(result, key=lambda item: item.cascade_id)
 
 
