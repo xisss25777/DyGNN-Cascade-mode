@@ -37,6 +37,15 @@ wikipedia_analysis.png
 *.temp
 *~
 *.log
+run_test.py
+simple_test.py
+train_dynamic_link_prediction.py
+
+# 诊断文件（临时文件，不需要上传）
+diagnose_*.py
+diagnosetest.py
+verify_fix_performance.py
+advanced_feature_engineering.py
 
 # 大文件
 *.csv
@@ -47,54 +56,14 @@ wikipedia_analysis.png
 
 # 操作系统文件
 .DS_Store
-Thumbs.db# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-
-# Virtual Environment
-venv/
-ENV/
-.venv/
-pyvenv.cfg
-
-# IDE
-pp/.vscode/
-.idea/
-*.swp
-*.swo
-
-
-# Data files (可选，如果你不想上传大文件)
-sample_data/
-TG_network_datasets/
-dataset/
-outputs/
-
-# Cache directory
-cache/
-
-# Models directory
-models/
-
-# Logs and temp files
-*.log
-*.tmp
-*.temp
-
-# OS files
-.DS_Store
 Thumbs.db
+
+# 临时目录
+temp_files/
+
+# 链接预测相关文件（如果不需要）
+cascade_model/dynamic_link_prediction.py
+cascade_model/tgat.py
+
+# 模型文件
+models/
