@@ -49,6 +49,39 @@ def load_cascades_from_csv(path: str) -> List[Cascade]:
     return sorted(result, key=lambda item: item.cascade_id)
 
 
+def normalize_cascade_times(events: List[Event], target_span=86400) -> List[Event]:
+    """
+    将级联时间归一化到目标时间跨度
+    
+    Args:
+        events: 事件列表
+        target_span: 目标时间跨度（秒）
+    
+    Returns:
+        归一化后的事件列表
+    """
+    if not events:
+        return events
+    
+    # 获取时间范围
+    timestamps = [event.timestamp for event in events]
+    min_time = min(timestamps)
+    max_time = max(timestamps)
+    time_span = max_time - min_time
+    
+    # 如果时间跨度为0，保持不变
+    if time_span == 0:
+        for event in events:
+            event.timestamp = 0
+        return events
+    
+    # 归一化到目标时间跨度
+    for event in events:
+        normalized_time = (event.timestamp - min_time) / time_span * target_span
+        event.timestamp = int(normalized_time)
+    
+    return events
+
 def load_wikipedia_cascades(path: str) -> List[Cascade]:
     cascades: Dict[str, List[Event]] = {}
     with open(path, "r", encoding="utf-8") as file:
@@ -73,8 +106,12 @@ def load_wikipedia_cascades(path: str) -> List[Cascade]:
     result: List[Cascade] = []
     for cascade_id, events in cascades.items():
         ordered = sorted(events, key=lambda item: item.timestamp)
-        enriched = _assign_parents(ordered)
-        result.append(Cascade(cascade_id=cascade_id, events=enriched, target_size=len(enriched)))
+        # 归一化时间到24小时窗口
+        normalized = normalize_cascade_times(ordered, target_span=86400)
+        enriched = _assign_parents(normalized)
+        # 计算唯一用户数作为目标大小
+        unique_users = set(event.user_id for event in enriched)
+        result.append(Cascade(cascade_id=cascade_id, events=enriched, target_size=len(unique_users)))
     return sorted(result, key=lambda item: item.cascade_id)
 
 
