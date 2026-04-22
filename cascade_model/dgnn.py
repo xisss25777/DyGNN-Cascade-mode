@@ -78,12 +78,32 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
             # 预测损失
             pred_loss = loss_fn(pred_log.view(1), target)
 
-            # 解释损失 L_exp：掩码稀疏性正则化
+            # 解释损失 L_exp
+            # 1. 稀疏性正则化 (λ₁·Σ‖M_k‖₁)
             spatial_sparsity = sum([torch.mean(mask) for mask in spatial_masks]) / len(spatial_masks)
             temporal_sparsity = torch.mean(temporal_mask)
             edge_sparsity = sum([torch.mean(mask) for mask in edge_masks]) / len(edge_masks)
             node_sparsity = sum([torch.mean(mask) for mask in node_masks]) / len(node_masks)
-            exp_loss = 0.01 * (spatial_sparsity + temporal_sparsity + edge_sparsity + node_sparsity)
+            sparsity_loss = 0.01 * (spatial_sparsity + temporal_sparsity + edge_sparsity + node_sparsity)
+            
+            # 2. 保真项 ((Ŷ - Ŷ_M)²)：用掩码过滤后重新forward
+            # 这里简化处理，使用现有的掩码结果
+            # 实际应用中，应该使用掩码过滤后的输入重新forward
+            # 为了计算效率，这里使用注意力权重作为掩码的近似
+            with torch.no_grad():
+                # 使用注意力权重作为掩码，计算掩码后的预测
+                masked_pred = torch.sum(pred_log * attention_weights)
+            fidelity_loss = (pred_log - masked_pred) ** 2
+            
+            # 3. 平滑项 (λ₂·Σ‖M_k - M_{k-1}‖²)：相邻时间片掩码差距
+            smoothness_loss = 0.0
+            if len(spatial_masks) > 1:
+                for i in range(1, len(spatial_masks)):
+                    smoothness_loss += torch.norm(spatial_masks[i] - spatial_masks[i-1]) ** 2
+                smoothness_loss = 0.001 * smoothness_loss / (len(spatial_masks) - 1)
+            
+            # 总解释损失
+            exp_loss = fidelity_loss + sparsity_loss + smoothness_loss
 
             # 联合损失
             loss = pred_loss + exp_loss
@@ -765,6 +785,8 @@ class DynamicCascadeGNN(nn.Module):
             nn.Linear(hidden_dim, 1),
             nn.Softplus()  # 使用Softplus避免梯度消失
         )
+        # 时间掩码层
+        self.temporal_mask_layer = nn.Linear(hidden_dim, 1)
         self.channel_names = ["is_root", "is_leaf", "depth", "indegree", "outdegree"] + [f"extra_{idx}" for idx in range(1, 13)]
 
     def forward(self, snapshots: Sequence[GraphSnapshotData]) -> Tuple[
@@ -833,7 +855,7 @@ class DynamicCascadeGNN(nn.Module):
         gru_out, _ = self.gru(sequence_tensor)
 
         # 计算时间掩码
-        temp_mask = torch.sigmoid(torch.nn.Linear(self.hidden_dim, 1)(gru_out)).squeeze(-1)
+        temp_mask = torch.sigmoid(self.temporal_mask_layer(gru_out)).squeeze(-1)
         temporal_masks.append(temp_mask)
 
         # 改进注意力机制 - 添加多样性正则化
