@@ -138,42 +138,55 @@ def main():
     # 准备模型
     print("🤖 准备模型...")
     
-    # 检查缓存文件
-    cache_path = "pp/cache/training_results.json"
-    if Path(cache_path).exists():
-        print("📦 从缓存加载训练结果...")
-        # 从缓存加载配置
-        cache_data = load_model_from_cache(cache_path)
-        if 'config' in cache_data:
-            # 更新配置
-            for key, value in cache_data['config'].items():
-                if hasattr(config, key):
-                    setattr(config, key, value)
-            print("  从缓存加载配置成功")
+    # 检查是否有保存的模型
+    model_dir = Path("pp/models")
+    model_files = list(model_dir.glob("dgnn_model_*.pth"))
     
-    # 运行训练获取模型
-    print("🚀 运行模型训练...")
-    report = run_dgnn_pipeline(
-        cascades=cascades,
-        config=config
-    )
-    
-    # 从报告中获取模型
-    if 'model' in report:
-        model = report['model']
-        model.eval()
-        print("  从训练结果获取模型成功")
-    else:
-        # 如果报告中没有模型，使用随机初始化模型
-        print("⚠️  报告中未找到模型，使用随机初始化模型")
+    if model_files:
+        # 加载最新的模型
+        model_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        model_path = model_files[0]
+        print(f"📦 从文件加载模型: {model_path}")
+        
+        import torch
+        checkpoint = torch.load(model_path)
+        
         # 构建示例数据来确定维度
         sample_cascade = cascades[0]
-        sample_snapshots = build_snapshots(sample_cascade, config)
+        sample_snapshots = build_snapshots(sample_cascade, config.observation_seconds, config.slice_seconds)
         from cascade_model.dgnn import snapshot_to_graph_data
         sample_graph_data = [snapshot_to_graph_data(sample_cascade, s) for s in sample_snapshots]
         input_dim = sample_graph_data[0].node_features.shape[1]
         graph_dim = sample_graph_data[0].graph_features.shape[0]
+        
         model = DynamicCascadeGNN(input_dim=input_dim, graph_dim=graph_dim)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.eval()
+        print("  模型加载成功")
+    else:
+        # 运行训练获取模型
+        print("🚀 运行模型训练...")
+        report = run_dgnn_pipeline(
+            cascades=cascades,
+            config=config
+        )
+        
+        # 从报告中获取模型
+        if 'model' in report:
+            model = report['model']
+            model.eval()
+            print("  从训练结果获取模型成功")
+        else:
+            # 如果报告中没有模型，使用随机初始化模型
+            print("⚠️  报告中未找到模型，使用随机初始化模型")
+            # 构建示例数据来确定维度
+            sample_cascade = cascades[0]
+            sample_snapshots = build_snapshots(sample_cascade, config.observation_seconds, config.slice_seconds)
+            from cascade_model.dgnn import snapshot_to_graph_data
+            sample_graph_data = [snapshot_to_graph_data(sample_cascade, s) for s in sample_snapshots]
+            input_dim = sample_graph_data[0].node_features.shape[1]
+            graph_dim = sample_graph_data[0].graph_features.shape[0]
+            model = DynamicCascadeGNN(input_dim=input_dim, graph_dim=graph_dim)
     
     # 测试3-5个不同大小的级联
     print("🚀 开始预测和解释...")
