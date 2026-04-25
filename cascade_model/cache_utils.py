@@ -107,11 +107,9 @@ class CacheManager:
         
         # 检查内存缓存
         if cache_key in self._snapshots_cache:
-            print(f"  从内存缓存加载快照: {cache_key}")
             return self._snapshots_cache[cache_key]
         
         # 计算快照
-        print(f"  计算快照: {cache_key}")
         snapshots = build_snapshots(
             cascade, 
             observation_seconds=config.observation_seconds, 
@@ -120,7 +118,6 @@ class CacheManager:
         
         # 缓存结果
         self._snapshots_cache[cache_key] = snapshots
-        print(f"  缓存快照: {cache_key}")
         
         # 每100个缓存项保存一次
         if len(self._snapshots_cache) % 100 == 0:

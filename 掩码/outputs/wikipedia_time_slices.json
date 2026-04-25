@@ -1,0 +1,162 @@
+[
+  {
+    "slice_index": 0,
+    "start_time": 0.0,
+    "end_time": 1.243695616722107,
+    "num_events": 1700,
+    "time_span": 1.243695616722107,
+    "event_density": 1366.8939386314894
+  },
+  {
+    "slice_index": 1,
+    "start_time": 1.2445108890533447,
+    "end_time": 2.472285747528076,
+    "num_events": 1700,
+    "time_span": 1.2277748584747314,
+    "event_density": 1384.618676841058
+  },
+  {
+    "slice_index": 2,
+    "start_time": 2.472285747528076,
+    "end_time": 3.752782106399536,
+    "num_events": 1701,
+    "time_span": 1.28049635887146,
+    "event_density": 1328.391125999876
+  },
+  {
+    "slice_index": 3,
+    "start_time": 3.7534003257751465,
+    "end_time": 5.212977409362793,
+    "num_events": 1700,
+    "time_span": 1.4595770835876465,
+    "event_density": 1164.7209449338523
+  },
+  {
+    "slice_index": 4,
+    "start_time": 5.213929176330566,
+    "end_time": 6.845818519592285,
+    "num_events": 1700,
+    "time_span": 1.6318893432617188,
+    "event_density": 1041.737301012179
+  },
+  {
+    "slice_index": 5,
+    "start_time": 6.8474955558776855,
+    "end_time": 8.629610061645508,
+    "num_events": 1700,
+    "time_span": 1.7821145057678223,
+    "event_density": 953.9229911983443
+  },
+  {
+    "slice_index": 6,
+    "start_time": 8.632079124450684,
+    "end_time": 10.698774337768555,
+    "num_events": 1700,
+    "time_span": 2.066695213317871,
+    "event_density": 822.5692830975406
+  },
+  {
+    "slice_index": 7,
+    "start_time": 10.699339866638184,
+    "end_time": 12.922986030578613,
+    "num_events": 1700,
+    "time_span": 2.2236461639404297,
+    "event_density": 764.5101219645043
+  },
+  {
+    "slice_index": 8,
+    "start_time": 12.92535400390625,
+    "end_time": 15.481075286865234,
+    "num_events": 1700,
+    "time_span": 2.5557212829589844,
+    "event_density": 665.1742548513583
+  },
+  {
+    "slice_index": 9,
+    "start_time": 15.484370231628418,
+    "end_time": 18.44822120666504,
+    "num_events": 1700,
+    "time_span": 2.963850975036621,
+    "event_density": 573.5780963072865
+  },
+  {
+    "slice_index": 10,
+    "start_time": 18.45163345336914,
+    "end_time": 21.813671112060547,
+    "num_events": 1700,
+    "time_span": 3.3620376586914062,
+    "event_density": 505.6457340997438
+  },
+  {
+    "slice_index": 11,
+    "start_time": 21.815160751342773,
+    "end_time": 25.798948287963867,
+    "num_events": 1700,
+    "time_span": 3.9837875366210938,
+    "event_density": 426.72958444010777
+  },
+  {
+    "slice_index": 12,
+    "start_time": 25.79901123046875,
+    "end_time": 30.645837783813477,
+    "num_events": 1700,
+    "time_span": 4.846826553344727,
+    "event_density": 350.7449629751768
+  },
+  {
+    "slice_index": 13,
+    "start_time": 30.64741325378418,
+    "end_time": 36.47897720336914,
+    "num_events": 1700,
+    "time_span": 5.831563949584961,
+    "event_density": 291.5169952172077
+  },
+  {
+    "slice_index": 14,
+    "start_time": 36.486244201660156,
+    "end_time": 44.653343200683594,
+    "num_events": 1700,
+    "time_span": 8.167098999023438,
+    "event_density": 208.15224600598984
+  },
+  {
+    "slice_index": 15,
+    "start_time": 44.66282272338867,
+    "end_time": 55.15201187133789,
+    "num_events": 1700,
+    "time_span": 10.489189147949219,
+    "event_density": 162.07163166014348
+  },
+  {
+    "slice_index": 16,
+    "start_time": 55.15265655517578,
+    "end_time": 71.26493072509766,
+    "num_events": 1700,
+    "time_span": 16.112274169921875,
+    "event_density": 105.50962465457121
+  },
+  {
+    "slice_index": 17,
+    "start_time": 71.2652587890625,
+    "end_time": 99.85318756103516,
+    "num_events": 1700,
+    "time_span": 28.587928771972656,
+    "event_density": 59.46565816501769
+  },
+  {
+    "slice_index": 18,
+    "start_time": 99.95697021484375,
+    "end_time": 174.98020935058594,
+    "num_events": 1700,
+    "time_span": 75.02323913574219,
+    "event_density": 22.659645458977455
+  },
+  {
+    "slice_index": 19,
+    "start_time": 175.1588897705078,
+    "end_time": 3200.50732421875,
+    "num_events": 1703,
+    "time_span": 3025.348434448242,
+    "event_density": 0.5629103678137458
+  }
+]

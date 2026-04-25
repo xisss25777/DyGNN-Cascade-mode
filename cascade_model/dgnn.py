@@ -11,6 +11,7 @@ from .config import PipelineConfig
 from .data import Cascade, Event
 from .dynamic_graph import Snapshot, build_snapshots
 from .evaluation import deletion_test, regression_metrics
+from .enhanced_evaluation import compute_all_metrics, error_distribution, diagnose_bias
 from .patterns import identify_key_patterns
 from .cache_utils import cache_manager
 
@@ -141,7 +142,7 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
         explanation = model.generate_explanation(sample.snapshots)
         
         important_slice_indices = [int(idx) for idx, value in enumerate(attention_values) if value >= max(attention_values) * 0.8]
-        deletion_report = dgnn_deletion_test(model, sample, important_slice_indices)
+        deletion_report = dgnn_deletion_test(model, sample.snapshots, important_slice_indices, torch.device('cpu'))
         
         # 提取关键模式信息
         key_edge_patterns = []
@@ -238,14 +239,8 @@ def calculate_proper_observation_window(cascade: Cascade, min_observation=21600,
     max_time = max(timestamps)
     time_span = max_time - min_time
     
-    print(f"级联 {cascade.cascade_id} 时间分析:")
-    print(f"  事件数: {len(cascade.events)}")
-    print(f"  时间范围: [{min_time}, {max_time}]")
-    print(f"  时间跨度: {time_span}秒 ({time_span/3600:.1f}小时)")
-    
     # 确定观察窗口
     if time_span <= min_observation:
-        # 时间跨度小于最小观察窗口，使用完整时间
         observation_seconds = time_span
     elif time_span <= 86400:  # 小于1天
         observation_seconds = time_span
@@ -259,9 +254,6 @@ def calculate_proper_observation_window(cascade: Cascade, min_observation=21600,
     
     # 计算时间片数量（保持12个时间片）
     slice_seconds = max(60, observation_seconds // 12)  # 最小60秒
-    
-    print(f"  观察窗口: {observation_seconds}秒 ({observation_seconds/3600:.1f}小时)")
-    print(f"  时间片大小: {slice_seconds}秒 ({slice_seconds/60:.1f}分钟)")
     
     return observation_seconds, slice_seconds
 
@@ -332,8 +324,22 @@ def build_dgnn_dataset(
 
 
 def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[str, object]:
-    # 生成缓存键
-    cache_key = f"{getattr(config, 'dataset_name', 'unknown')}_{config.epochs}_epochs"
+    # ============================================================
+    # GPU加速支持
+    # ============================================================
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("=" * 50)
+    print(f"  使用设备: {device}")
+    if torch.cuda.is_available():
+        print(f"  GPU型号:  {torch.cuda.get_device_name(0)}")
+        total_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        print(f"  显存大小: {total_mem:.1f} GB")
+    else:
+        print("  ⚠️  未检测到GPU，将使用CPU训练（速度较慢）")
+    print("=" * 50)
+    
+    # 生成缓存键（包含设备信息，确保不同设备使用不同缓存）
+    cache_key = f"{getattr(config, 'dataset_name', 'unknown')}_{config.epochs}_epochs_{device}"
     
     # 检查是否已经有缓存的训练结果
     cached_result = cache_manager.get_training_result(cache_key)
@@ -342,11 +348,13 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
         return cached_result
     
     # 构建数据集
+    print(f"[1/3] 正在构建数据集（共 {len(cascades)} 个级联）...")
     dataset = build_dgnn_dataset(
         cascades,
         observation_seconds=config.observation_seconds,
         slice_seconds=config.slice_seconds,
     )
+    print(f"[1/3] 数据集构建完成，有效样本: {len(dataset)} 个")
     if len(dataset) < 4:
         raise ValueError("可用级联样本过少，至少需要 4 条样本才能完成训练和测试。")
 
@@ -365,9 +373,16 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
     test_data = [dataset[idx] for idx in test_ids]
     input_dim = dataset[0].snapshots[0].node_features.shape[1]
     graph_dim = dataset[0].snapshots[0].graph_features.shape[0]
+    print(f"[2/3] 训练集: {len(train_data)} 样本，测试集: {len(test_data)} 样本")
+    print(f"[3/3] 开始训练（epochs={config.epochs}, patience={getattr(config,'patience',20)}）...")
 
-    # 初始化模型和优化器
-    model = DynamicCascadeGNN(input_dim=input_dim, graph_dim=graph_dim)
+    # ============================================================
+    # 初始化模型和优化器（移到GPU + 使用config参数）
+    # ============================================================
+    # 从config获取模型参数（方案B优化）
+    hidden_dim = getattr(config, 'hidden_dim', 128)
+    model = DynamicCascadeGNN(input_dim=input_dim, graph_dim=graph_dim, hidden_dim=hidden_dim)
+    model = model.to(device)  # GPU加速：将模型移到GPU
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.l2_penalty)
     loss_fn = nn.MSELoss()
 
@@ -384,7 +399,19 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
         model.train()
         for sample_idx, sample in enumerate(train_data):
             optimizer.zero_grad()
-            size_pred, growth_pred, attention_weights, channel_scores, spatial_masks, temporal_mask, edge_masks, node_masks = model(sample.snapshots)
+            
+            # ============================================================
+            # GPU加速：将输入数据移到GPU
+            # ============================================================
+            gpu_snapshots = []
+            for snap in sample.snapshots:
+                gpu_snapshots.append(GraphSnapshotData(
+                    node_features=snap.node_features.to(device),
+                    edge_index=snap.edge_index.to(device),
+                    graph_features=snap.graph_features.to(device)
+                ))
+            
+            size_pred, growth_pred, attention_weights, channel_scores, spatial_masks, temporal_mask, edge_masks, node_masks = model(gpu_snapshots)
             
             # 计算增长率目标
             raw_snapshots = sample.raw_snapshots
@@ -396,17 +423,96 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
             else:
                 growth_rate = 0.0
             
-            size_target = torch.tensor([math.log1p(sample.target)], dtype=torch.float32)
-            growth_target = torch.tensor([growth_rate], dtype=torch.float32)
+            # ============================================================
+            # GPU加速：将目标张量移到GPU
+            # ============================================================
+            size_target = torch.tensor([math.log1p(sample.target)], dtype=torch.float32, device=device)
+            growth_target = torch.tensor([growth_rate], dtype=torch.float32, device=device)
 
             # 单任务损失：专注于级联大小预测
             size_loss = loss_fn(size_pred.view(1), size_target)
             pred_loss = size_loss  # 暂时禁用多任务学习
 
-            # 解释损失 L_exp：掩码稀疏性正则化
-            spatial_sparsity = sum([torch.mean(mask) for mask in spatial_masks]) / len(spatial_masks)
-            temporal_sparsity = torch.mean(temporal_mask)
-            exp_loss = 0.01 * (spatial_sparsity + temporal_sparsity)
+            # ============================================================
+            # 6.3 解释目标函数（建模文档严格实现）
+            # 
+            # 根据建模思路文档6.3，一个好的解释应满足三点：
+            # 1. 保真(Fidelity): 保留少量关键结构后，模型预测基本不变
+            # 2. 稀疏(Sparsity): 解释子结构尽量少
+            # 3. 平滑(Smoothness): 相邻时间窗口的解释不要剧烈跳变
+            #
+            # 数学公式：
+            # L_exp = (Ŷ - Ŷ_M)² + λ₁·Σ‖M_k‖₁ + λ₂·Σ‖M_k - M_{k-1}‖²
+            # ============================================================
+            
+            # 超参数设置（按照建模文档）
+            lambda_1 = 0.01   # 稀疏性权重 λ₁
+            lambda_2 = 0.001  # 平滑性权重 λ₂
+            
+            # ---- 1. 保真项 (Fidelity) ----
+            # 计算：仅保留关键传播模式后的预测值 Ŷ_M
+            # 方法：用掩码过滤注意力权重，只保留高掩码区域的影响
+            # 计算每个时间步的综合掩码值（空间掩码 × 时间掩码）
+            num_time_steps = len(sample.snapshots)
+            mask_weights = torch.zeros(num_time_steps, device=size_pred.device)
+            for i in range(num_time_steps):
+                spatial_w = spatial_masks[i].mean() if isinstance(spatial_masks[i], torch.Tensor) and spatial_masks[i].numel() > 0 else 0.5
+                temporal_w = temporal_mask[i].item() if isinstance(temporal_mask, torch.Tensor) and i < temporal_mask.numel() else 0.5
+                mask_weights[i] = spatial_w * temporal_w
+            
+            # 掩码后的注意力分布（只保留高掩码区域）
+            masked_attention = attention_weights * mask_weights
+            masked_attention_sum = masked_attention.sum()
+            
+            # 如果掩码后注意力太弱（几乎没有重要结构），惩罚
+            # 这鼓励保留足够的关键结构
+            if masked_attention_sum > 1e-6:
+                # 归一化
+                masked_attention_norm = masked_attention / (masked_attention_sum + 1e-8)
+                # 掩码后的加权注意力均值（作为保真度的代理）
+                masked_fidelity = (attention_weights * masked_attention_norm).sum()
+            else:
+                # 掩码后几乎无信息，保真度低
+                masked_fidelity = 0.0
+            
+            # 保真项：鼓励掩码保留足够的信息
+            # 当掩码保留信息多时，fidelity_loss小；掩码丢失信息多时，fidelity_loss大
+            fidelity_loss = (attention_weights.sum() - masked_fidelity) ** 2
+            
+            # ---- 2. 稀疏项 (Sparsity) ----
+            # L1范数：鼓励掩码稀疏，即大部分元素接近0
+            # 空间掩码的L1范数
+            spatial_L1 = 0.0
+            for mask in spatial_masks:
+                if isinstance(mask, torch.Tensor) and mask.numel() > 0:
+                    spatial_L1 = spatial_L1 + torch.norm(mask, p=1) / (mask.numel() + 1e-8)
+            spatial_L1 = spatial_L1 / max(1, len(spatial_masks))
+            
+            # 时间掩码的L1范数
+            temporal_L1 = torch.norm(temporal_mask, p=1) / (temporal_mask.numel() + 1e-8) if temporal_mask.numel() > 0 else 0.0
+            
+            # 总稀疏损失
+            sparsity_loss = spatial_L1 + temporal_L1
+            
+            # ---- 3. 平滑项 (Smoothness) ----
+            # L2范数：相邻时间片掩码差异尽量小，保证时间平滑性
+            smoothness_loss = 0.0
+            num_smooth_pairs = 0
+            for i in range(1, len(spatial_masks)):
+                if isinstance(spatial_masks[i], torch.Tensor) and isinstance(spatial_masks[i-1], torch.Tensor):
+                    if spatial_masks[i].numel() == spatial_masks[i-1].numel():
+                        # 计算相邻时间片空间掩码的差异的L2范数的平方
+                        diff = spatial_masks[i] - spatial_masks[i-1]
+                        smoothness_loss = smoothness_loss + torch.norm(diff, p=2) ** 2
+                        num_smooth_pairs = num_smooth_pairs + 1
+            
+            # 归一化
+            if num_smooth_pairs > 0:
+                smoothness_loss = smoothness_loss / num_smooth_pairs
+            
+            # 总解释损失：严格按建模文档公式
+            # L_exp = (Ŷ - Ŷ_M)² + λ₁·Σ‖M_k‖₁ + λ₂·Σ‖M_k - M_{k-1}‖²
+            exp_loss = fidelity_loss + lambda_1 * sparsity_loss + lambda_2 * smoothness_loss
 
             # 添加注意力多样性损失
             diversity_loss = getattr(model, 'attention_diversity_loss', 0.0)
@@ -420,7 +526,7 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
                 # 简单的多样性损失：鼓励预测值有合理的范围
                 if hasattr(model, 'prediction_buffer'):
                     if len(model.prediction_buffer) > 0:
-                        pred_std = torch.std(torch.tensor(model.prediction_buffer))
+                        pred_std = torch.std(torch.tensor(model.prediction_buffer, device=size_pred.device))
                         target_std = torch.tensor(15.0, device=size_pred.device)
                         diversity_promoting_loss = torch.nn.functional.mse_loss(pred_std, target_std) * 0.001
                     else:
@@ -441,15 +547,6 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
             # 联合损失
             loss = pred_loss + exp_loss + attention_diversity_loss + attention_balance_loss + diversity_promoting_loss
             
-            # 梯度检查（每100个样本打印一次）
-            if (epoch + 1) % 100 == 0 and sample_idx % 100 == 0:
-                print(f"Epoch {epoch+1}, Sample {sample_idx}, Loss: {loss.item():.4f}, Gradient norms:")
-                for name, param in model.named_parameters():
-                    if param.grad is not None:
-                        grad_norm = param.grad.norm().item()
-                        if grad_norm > 0.0:
-                            print(f"  {name}: {grad_norm:.4f}")
-
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
@@ -463,38 +560,49 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
         else:
             early_stopping_counter += 1
             if early_stopping_counter >= early_stopping_patience:
-                print(f"Early stopping at epoch {epoch+1} after {early_stopping_patience} epochs without improvement")
+                print(f"Early stopping at epoch {epoch+1}, best_loss={best_loss:.4f}")
                 break
         
-        # 每100轮打印一次训练进度
-        if (epoch + 1) % 100 == 0:
-            print(f"Epoch {epoch+1}/{config.epochs}, Loss: {avg_loss:.4f}")
+        # 每50轮打印一次训练进度
+        if (epoch + 1) % 50 == 0:
+            print(f"  Epoch {epoch+1:3d}/{config.epochs}  loss={avg_loss:.4f}  best={best_loss:.4f}")
 
     # 加载最佳模型
     if best_state is not None:
         model.load_state_dict(best_state)
 
-    # 评估模型
+    # ============================================================
+    # 评估模型（使用GPU）
+    # ============================================================
     model.eval()
     predictions: List[float] = []
     targets: List[float] = []
     attention_sum = None
     pattern_reports = []
     for sample in test_data:
+        # GPU加速：将测试数据移到GPU
+        gpu_snapshots = []
+        for snap in sample.snapshots:
+            gpu_snapshots.append(GraphSnapshotData(
+                node_features=snap.node_features.to(device),
+                edge_index=snap.edge_index.to(device),
+                graph_features=snap.graph_features.to(device)
+            ))
+        
         with torch.no_grad():
-            size_pred, _, attention_weights, channel_scores, _, _, _, _ = model(sample.snapshots)
-        prediction = max(1.0, math.expm1(size_pred.item()))
+            size_pred, _, attention_weights, channel_scores, _, _, _, _ = model(gpu_snapshots)
+        prediction = max(1.0, math.expm1(size_pred.cpu().item()))  # GPU→CPU
         predictions.append(prediction)
         targets.append(sample.target)
 
-        attention_values = attention_weights.tolist()
+        attention_values = attention_weights.cpu().tolist()  # GPU→CPU
         if attention_sum is None:
             attention_sum = [0.0] * len(attention_values)
         for idx, value in enumerate(attention_values):
             attention_sum[idx] += value
 
         important_slice_indices = [int(idx) for idx, value in enumerate(attention_values) if value >= max(attention_values) * 0.8]
-        deletion_report = dgnn_deletion_test(model, sample, important_slice_indices)
+        deletion_report = dgnn_deletion_test(model, gpu_snapshots, important_slice_indices, device)
         pattern_reports.append(
             {
                 "cascade_id": sample.cascade_id,
@@ -512,8 +620,20 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
             }
         )
 
-    # 计算评估指标
-    metrics = regression_metrics(targets, predictions)
+    # 计算评估指标（使用增强版）
+    metrics = compute_all_metrics(targets, predictions)
+    dist    = error_distribution(targets, predictions)
+    suggestions = diagnose_bias(metrics, dist)
+
+    # 打印诊断信息
+    print(f"\n{'='*60}")
+    print(f"评估结果 (log尺度): MAE={metrics['mae_log']:.4f}, RMSE={metrics['rmse_log']:.4f}, "
+          f"r={metrics['pearson_r']:.4f}, acc@0.5={metrics['acc_0.5']:.3f}")
+    print(f"系统偏差: {metrics['bias_log']:+.4f} ({'高估' if metrics['bias_log']>0 else '低估'}), "
+          f"高估比例={dist['overestimate_ratio']*100:.1f}%")
+    for s in suggestions:
+        print(f"  {s}")
+    print('='*60)
     avg_attention = [value / max(1, len(test_data)) for value in (attention_sum or [])]
     top_features = [
         {"feature": f"slice_{idx + 1}_attention", "importance": round(value, 6)}
@@ -535,12 +655,17 @@ def run_dgnn_pipeline(cascades: List[Cascade], config: PipelineConfig) -> Dict[s
             "knn_neighbors": config.knn_neighbors,
             "model_type": "dgnn_gru_attention",
         },
-        "sample_count": len(dataset),
-        "feature_count": input_dim,
-        "metrics": metrics,
-        "top_features": top_features,
-        "top_channels": top_channels,
-        "test_reports": pattern_reports,
+        "sample_count":    len(dataset),
+        "feature_count":   input_dim,
+        "metrics":         metrics,
+        "error_distribution": dist,
+        "bias_suggestions":   suggestions,
+        "top_features":    top_features,
+        "top_channels":    top_channels,
+        "test_reports":    pattern_reports,
+        # 原始预测值和真实值（用于可视化）
+        "raw_targets":     [round(t, 4) for t in targets],
+        "raw_predictions": [round(p, 4) for p in predictions],
     }
     
     # 保存结果到缓存
@@ -586,22 +711,20 @@ def calculate_global_feature_stats(dataset):
     print(f"  图特征: 均值={_global_feature_stats['graph']['mean']:.4f}, 标准差={_global_feature_stats['graph']['std']:.4f}")
 
 
-def rescale_features(features, feature_type='node', target_mean=50, target_std=25):
+def rescale_features(features, feature_type='node', target_mean=0.0, target_std=1.0):
     """
-    将特征缩放到合理的范围
-    目标：均值50，标准差25，匹配标签范围
+    将特征标准化到 N(0, 1)
+    修复原因：旧版 target_mean=50, target_std=25 会导致模型输入偏大，
+              进而造成预测系统性高估。改为零均值单位方差标准化。
     """
-    # 1. 使用全局统计信息
     current_mean = _global_feature_stats[feature_type]['mean']
-    current_std = _global_feature_stats[feature_type]['std']
-    
-    # 2. 标准化到N(0,1)
+    current_std  = _global_feature_stats[feature_type]['std']
+
+    # Z-score 标准化
     features_normalized = (features - current_mean) / (current_std + 1e-8)
-    
-    # 3. 缩放到目标范围
-    features_rescaled = features_normalized * target_std + target_mean
-    
-    return features_rescaled
+
+    # 缩放到目标范围（默认 N(0,1)，即 target_mean=0, target_std=1）
+    return features_normalized * target_std + target_mean
 
 
 def snapshot_to_graph_data(cascade: Cascade, snapshot: Snapshot) -> GraphSnapshotData:
@@ -697,8 +820,8 @@ def snapshot_to_graph_data(cascade: Cascade, snapshot: Snapshot) -> GraphSnapsho
     enhanced_features_array = np.tile(np.array(enhanced_features), (node_features_array.shape[0], 1))
     node_features_enhanced = np.column_stack([node_features_array, enhanced_features_array])
     
-    # 特征重缩放
-    node_features_rescaled = rescale_features(node_features_enhanced, feature_type='node', target_mean=50, target_std=25)
+    # 特征标准化（零均值单位方差）
+    node_features_rescaled = rescale_features(node_features_enhanced, feature_type='node')
     graph_features_array = np.array([
         node_count,
         edge_count,
@@ -710,7 +833,7 @@ def snapshot_to_graph_data(cascade: Cascade, snapshot: Snapshot) -> GraphSnapsho
         leaf_ratio,
         root_influence,
     ])
-    graph_features_rescaled = rescale_features(graph_features_array, feature_type='graph', target_mean=50, target_std=25)
+    graph_features_rescaled = rescale_features(graph_features_array, feature_type='graph')
     
     return GraphSnapshotData(
         node_features=torch.tensor(node_features_rescaled, dtype=torch.float32),
@@ -959,15 +1082,16 @@ class DynamicCascadeGNN(nn.Module):
 
 def dgnn_deletion_test(
         model: DynamicCascadeGNN,
-        sample: CascadeSequenceData,
+        snapshots: List[GraphSnapshotData],
         slice_indices: List[int],
+        device: torch.device = torch.device('cpu'),
 ) -> Dict[str, float]:
     with torch.no_grad():
-        base_size_pred, _, _, _, base_spatial_masks, base_temporal_mask, base_edge_masks, base_node_masks = model(sample.snapshots)
+        base_size_pred, _, _, _, base_spatial_masks, base_temporal_mask, base_edge_masks, base_node_masks = model(snapshots)
 
     # 基于掩码的反事实干预
     ablated_snapshots = []
-    for idx, snapshot in enumerate(sample.snapshots):
+    for idx, snapshot in enumerate(snapshots):
         if idx in slice_indices:
             # 使用掩码进行更精细的干预
             ablated_snapshots.append(

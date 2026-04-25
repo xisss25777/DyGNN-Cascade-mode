@@ -21,9 +21,9 @@ def main() -> None:
     parser.add_argument("--input", help="事件级联 CSV 文件路径")
     parser.add_argument(
         "--dataset",
-        choices=["wikipedia", "reddit", "cascade", "synthetic"],
+        choices=["wikipedia", "reddit", "enron", "mooc", "cascade", "synthetic"],
         required=True,
-        help="当前运行的数据集类型；真实实验请显式选择 wikipedia 或 reddit",
+        help="当前运行的数据集类型；真实实验请选择 wikipedia/reddit/enron/mooc",
     )
     parser.add_argument("--output", default="outputs/report.json", help="结果输出路径")
     parser.add_argument("--save-sample", action="store_true", help="将模拟数据保存为 sample_data/cascades.csv")
@@ -32,8 +32,10 @@ def main() -> None:
 
     dataset_name, cascades, config = load_dataset_and_config(args.input, args.dataset)
 
-    # 生成缓存键
-    cache_key = f"{dataset_name}_{config.epochs}_epochs"
+    # 生成缓存键（含设备信息，确保GPU/CPU不混用缓存）
+    import torch
+    _device_tag = "cuda" if torch.cuda.is_available() else "cpu"
+    cache_key = f"{dataset_name}_{config.epochs}_epochs_{_device_tag}"
 
     # 检查是否已经有缓存的训练结果
     cached_result = cache_manager.get_training_result(cache_key)

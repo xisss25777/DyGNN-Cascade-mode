@@ -1,0 +1,47 @@
+{
+  "matches": {
+    "0": {
+      "original_value": 3.0,
+      "aggregated_prediction": 2.8074675533799125,
+      "difference": 0.1925324466200875,
+      "strategy": "mean"
+    },
+    "12": {
+      "original_value": 2.0,
+      "aggregated_prediction": 2.4766915288512097,
+      "difference": 0.4766915288512097,
+      "strategy": "mean"
+    },
+    "25": {
+      "original_value": 2.0,
+      "aggregated_prediction": 3.0414339650963345,
+      "difference": 1.0414339650963345,
+      "strategy": "mean"
+    },
+    "38": {
+      "original_value": 1.0,
+      "aggregated_prediction": 2.969426596672967,
+      "difference": 1.969426596672967,
+      "strategy": "mean"
+    },
+    "51": {
+      "original_value": 1.0,
+      "aggregated_prediction": 3.048288351628829,
+      "difference": 2.048288351628829,
+      "strategy": "mean"
+    },
+    "64": {
+      "original_value": 1.0,
+      "aggregated_prediction": 2.5487299568283674,
+      "difference": 1.5487299568283674,
+      "strategy": "mean"
+    },
+    "141": {
+      "original_value": 1.0,
+      "aggregated_prediction": 2.674888151222416,
+      "difference": 1.674888151222416,
+      "strategy": "mean"
+    }
+  },
+  "best_strategy": "mean"
+}
